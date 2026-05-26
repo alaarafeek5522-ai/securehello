@@ -5,12 +5,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <android/log.h>
-#include <sys/ptrace.h>
 #include <signal.h>
 #include <dlfcn.h>
 #include <pthread.h>
-
-#define TAG "SH"
 
 static void killApp() {
     kill(getpid(), SIGKILL);
@@ -25,8 +22,6 @@ static bool isBeingDebugged() {
             if (pid != 0) return true;
         }
     }
-    if (ptrace(PTRACE_TRACEME, 0, 0, 0) == -1) return true;
-    ptrace(PTRACE_DETACH, 0, 0, 0);
     return false;
 }
 
@@ -54,7 +49,6 @@ static bool isFridaPresent() {
     while (std::getline(maps, line)) {
         if (line.find("frida") != std::string::npos) return true;
         if (line.find("gadget") != std::string::npos) return true;
-        if (line.find("FRIDA") != std::string::npos) return true;
     }
     std::ifstream tcp("/proc/net/tcp");
     while (std::getline(tcp, line)) {
@@ -80,7 +74,6 @@ static bool isRooted() {
     return false;
 }
 
-// مكان 5 — thread بيفحص كل 30 ثانية
 static void* securityThread(void*) {
     while (true) {
         sleep(30);
@@ -90,12 +83,11 @@ static void* securityThread(void*) {
     return nullptr;
 }
 
-// مكان 4 — بيتنفذ أوتوماتيك عند تحميل الـ .so
 __attribute__((constructor))
 static void onLibraryLoad() {
+    // بدون ptrace — بس فحص Frida والـ debug
     if (isBeingDebugged()) killApp();
     if (isFridaPresent()) killApp();
-    // شغّل thread المراقبة
     pthread_t thread;
     pthread_create(&thread, nullptr, securityThread, nullptr);
     pthread_detach(thread);

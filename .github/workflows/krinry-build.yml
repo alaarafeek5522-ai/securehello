@@ -6,58 +6,106 @@ on:
       build_type:
         description: 'Build type'
         required: true
-        default: 'release'
+        default: 'debug'
         type: choice
-        options: [debug, release]
+        options:
+          - debug
+          - profile
+          - release
+      
+      output_type:
+        description: 'Output type'
+        required: true
+        default: 'apk'
+        type: choice
+        options:
+          - apk
+          - appbundle
+          - apk-split
+      
+      target_platform:
+        description: 'Target platform (APK only)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - android-arm64
+          - android-arm
+          - android-x64
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - uses: subosito/flutter-action@v2
+          cache: 'gradle'
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.41.0'
           channel: 'stable'
-
-      - name: Install NDK
-        run: |
-          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;27.0.12077973"
-
-      - name: Flutter pub get
+          cache: true
+      
+      - name: Flutter version
+        run: flutter --version
+      
+      - name: Get dependencies
         run: flutter pub get
-
-      - name: Create android folder
-        run: flutter create --platforms android .
-
-      - name: Copy custom android files
+      
+      - name: Build
         run: |
-          cp android/app/build.gradle /tmp/build.gradle.bak
-          cp -f android_override/app/build.gradle android/app/build.gradle || true
-          mkdir -p android/app/src/main/cpp
-          cp src/main/cpp/security.cpp android/app/src/main/cpp/ || true
-          cp android/app/CMakeLists.txt android/app/CMakeLists.txt || true
-
-      - name: Decode keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/keystore.jks
-
-      - name: Build APK
-        env:
-          KEYSTORE_PATH: keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: flutter build apk --${{ github.event.inputs.build_type }}
-
-      - uses: actions/upload-artifact@v4
+          BUILD_TYPE="${{ github.event.inputs.build_type }}"
+          OUTPUT_TYPE="${{ github.event.inputs.output_type }}"
+          TARGET_PLATFORM="${{ github.event.inputs.target_platform }}"
+          
+          echo "🔨 Build Configuration:"
+          echo "  Type: $BUILD_TYPE"
+          echo "  Output: $OUTPUT_TYPE"
+          echo "  Platform: $TARGET_PLATFORM"
+          echo ""
+          
+          # Build APK
+          if [ "$OUTPUT_TYPE" = "apk" ]; then
+            if [ "$TARGET_PLATFORM" != "all" ]; then
+              echo "Building APK ($BUILD_TYPE) for $TARGET_PLATFORM..."
+              flutter build apk --$BUILD_TYPE --target-platform $TARGET_PLATFORM
+            else
+              echo "Building APK ($BUILD_TYPE)..."
+              flutter build apk --$BUILD_TYPE
+            fi
+          
+          # Build APK split per ABI
+          elif [ "$OUTPUT_TYPE" = "apk-split" ]; then
+            echo "Building split APKs ($BUILD_TYPE)..."
+            flutter build apk --$BUILD_TYPE --split-per-abi
+          
+          # Build App Bundle
+          elif [ "$OUTPUT_TYPE" = "appbundle" ]; then
+            echo "Building App Bundle ($BUILD_TYPE)..."
+            flutter build appbundle --$BUILD_TYPE
+          fi
+      
+      - name: Upload APK
+        if: ${{ github.event.inputs.output_type == 'apk' || github.event.inputs.output_type == 'apk-split' }}
+        uses: actions/upload-artifact@v4
         with:
-          name: secure-hello-apk
+          name: build-${{ github.event.inputs.build_type }}-${{ github.event.inputs.output_type }}
           path: build/app/outputs/flutter-apk/*.apk
+          retention-days: 7
+      
+      - name: Upload App Bundle
+        if: ${{ github.event.inputs.output_type == 'appbundle' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ github.event.inputs.build_type }}-${{ github.event.inputs.output_type }}
+          path: build/app/outputs/bundle/*/*.aab
           retention-days: 7

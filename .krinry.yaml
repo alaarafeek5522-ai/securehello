@@ -1,0 +1,13 @@
+# krinry configuration v3.1.1
+project:
+  name: securehello
+  type: flutter
+
+build:
+  default_type: debug
+  output_path: build/app/outputs/flutter-apk
+
+cloud:
+  provider: github
+  workflow: krinry-build.yml
+  poll_interval: 8

@@ -1,0 +1,88 @@
+name: krinry Flutter Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'release'
+        type: choice
+        options: [debug, release]
+      output_type:
+        description: 'Output type'
+        required: true
+        default: 'apk'
+        type: choice
+        options: [apk, appbundle, apk-split]
+      target_platform:
+        description: 'Target platform'
+        required: true
+        default: 'android-arm64'
+        type: choice
+        options: [all, android-arm64, android-arm, android-x64]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.0'
+          channel: 'stable'
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Create android folder
+        run: flutter create --platforms android .
+
+      - name: Copy custom files
+        run: |
+          cp -f android_custom/app/build.gradle android/app/build.gradle 2>/dev/null || true
+          cp -f android_custom/app/CMakeLists.txt android/app/CMakeLists.txt 2>/dev/null || true
+          cp -f android_custom/app/proguard-rules.pro android/app/proguard-rules.pro 2>/dev/null || true
+          mkdir -p android/app/src/main/cpp
+          mkdir -p android/app/src/main/kotlin/com/alaa/securehello
+          cp -f android/app/src/main/cpp/security.cpp android/app/src/main/cpp/ 2>/dev/null || true
+          cp -f android/app/src/main/kotlin/com/alaa/securehello/MainActivity.kt android/app/src/main/kotlin/com/alaa/securehello/ 2>/dev/null || true
+
+      - name: Decode keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/keystore.jks
+
+      - name: Build
+        env:
+          KEYSTORE_PATH: keystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type }}"
+          OUTPUT_TYPE="${{ github.event.inputs.output_type }}"
+          TARGET="${{ github.event.inputs.target_platform }}"
+          if [ "$OUTPUT_TYPE" = "apk" ]; then
+            if [ "$TARGET" != "all" ]; then
+              flutter build apk --$BUILD_TYPE --target-platform $TARGET
+            else
+              flutter build apk --$BUILD_TYPE
+            fi
+          elif [ "$OUTPUT_TYPE" = "apk-split" ]; then
+            flutter build apk --$BUILD_TYPE --split-per-abi
+          elif [ "$OUTPUT_TYPE" = "appbundle" ]; then
+            flutter build appbundle --$BUILD_TYPE
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: secure-hello-apk
+          path: |
+            build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/bundle/*/*.aab
+          retention-days: 7

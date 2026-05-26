@@ -21,7 +21,7 @@ class SecurityHelper {
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.alaa.securehello/security"
-    private val VALID_SIGNATURE = "REPLACE_WITH_YOUR_SHA256"
+    private val VALID_SIGNATURE = "318d4d9d730459aacd7f93df42a7f3fefc2ab8395e52518933 5fd48fbb26023b"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -60,9 +60,7 @@ class MainActivity : FlutterActivity() {
         if (helper.checkRoot() != "OK") reasons.add("ROOT_DETECTED")
 
         val sig = getApkSignature()
-        if (VALID_SIGNATURE != "REPLACE_WITH_YOUR_SHA256" && sig != VALID_SIGNATURE) {
-            reasons.add("SIGNATURE_MISMATCH")
-        }
+        if (sig != VALID_SIGNATURE) reasons.add("SIGNATURE_MISMATCH")
 
         return mapOf("passed" to reasons.isEmpty(), "reason" to reasons.joinToString(", "))
     }

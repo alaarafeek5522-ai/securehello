@@ -3,7 +3,6 @@
     native <methods>;
 }
 -dontwarn **
--obfuscatecode
 -repackageclasses ''
 -allowaccessmodification
 -optimizationpasses 5

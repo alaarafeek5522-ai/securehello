@@ -21,7 +21,7 @@ class SecurityHelper {
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.alaa.securehello/security"
-    private val VALID_SIGNATURE = "318d4d9d730459aacd7f93df42a7f3fefc2ab8395e52518933 5fd48fbb26023b"
+    private val VALID_SIGNATURE = "318d4d9d730459aacd7f93df42a7f3fefc2ab8395e525189335fd48fbb26023b"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

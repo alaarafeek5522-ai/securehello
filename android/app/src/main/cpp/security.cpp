@@ -348,3 +348,10 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_alaa_securehello_SecurityHelper_killIfTampered(JNIEnv*, jobject) {
     killApp();
 }
+// استبدال checkHooks بفحص LD_PRELOAD بس
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_alaa_securehello_SecurityHelper_checkHooks(JNIEnv*, jobject) {
+    char* preload = getenv("LD_PRELOAD");
+    if (preload != nullptr) { killApp(); return JNI_FALSE; }
+    return JNI_TRUE;
+}

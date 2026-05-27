@@ -14,6 +14,7 @@ class SecurityHelper {
     external fun checkEmulator(): String
     external fun checkFrida(): String
     external fun checkRoot(): String
+    external fun checkXposed(): String
     external fun checkPackageName(context: android.content.Context): Boolean
     external fun killIfTampered()
     companion object { init { System.loadLibrary("security") } }
@@ -21,38 +22,54 @@ class SecurityHelper {
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.alaa.securehello/security"
-    private val S1 = "318d4d9d730459aa"
-    private val S2 = "cd7f93df42a7f3fe"
-    private val S3 = "fc2ab8395e525189"
-    private val S4 = "335fd48fbb26023b"
-    private val VALID_SIG get() = S1 + S2 + S3 + S4
 
-    // مكان 1 — onCreate قبل Flutter
+    // التوقيع مشفر بـ XOR
+    private val encSig = byteArrayOf(
+        0x69,0x6b,0x62,0x3e,0x6e,0x3e,0x63,0x3e,0x6d,0x69,0x6a,0x6e,
+        0x6f,0x63,0x3b,0x3b,0x39,0x3e,0x6d,0x3c,0x63,0x69,0x3e,0x3c,
+        0x6e,0x68,0x3b,0x6d,0x3c,0x69,0x3c,0x3f,0x3c,0x39,0x68,0x3b,
+        0x38,0x62,0x69,0x63,0x6f,0x3f,0x6f,0x68,0x6f,0x6b,0x62,0x63,
+        0x69,0x69,0x6f,0x3c,0x3e,0x6e,0x62,0x3c,0x38,0x38,0x68,0x6c,
+        0x6a,0x68,0x69,0x38
+    )
+    private val xorKey: Byte = 0x5A
+
+    private fun decryptSig(): String {
+        return encSig.map { (it.toInt() xor xorKey.toInt()).toChar() }.joinToString("")
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        checkSignatureOrKill()
-        checkPackageOrKill()
+        hardCheck()
         super.onCreate(savedInstanceState)
     }
 
-    // مكان 2 — onStart
     override fun onStart() {
         super.onStart()
         checkSignatureOrKill()
     }
 
-    // مكان 3 — onResume كل ما يرجع للفور
     override fun onResume() {
         super.onResume()
-        checkSignatureOrKill()
-        checkPackageOrKill()
-        val helper = SecurityHelper()
-        if (helper.checkFrida() != "OK") killNow()
-        if (helper.checkDebug() != "OK") killNow()
+        hardCheck()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) checkSignatureOrKill()
     }
 
     private fun killNow() {
         Process.killProcess(Process.myPid())
         System.exit(0)
+    }
+
+    private fun hardCheck() {
+        val helper = SecurityHelper()
+        if (!helper.checkPackageName(applicationContext)) killNow()
+        if (helper.checkFrida() != "OK") killNow()
+        if (helper.checkDebug() != "OK") killNow()
+        if (helper.checkXposed() != "OK") killNow()
+        checkSignatureOrKill()
     }
 
     private fun getSignatureV1(): String {
@@ -75,15 +92,12 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun checkSignatureOrKill() {
-        val sig1 = getSignatureV1()
-        val sig2 = getSignatureV2()
-        if (sig1 != sig2) killNow()
-        if (sig1 != VALID_SIG) killNow()
-    }
-
-    private fun checkPackageOrKill() {
-        val helper = SecurityHelper()
-        if (!helper.checkPackageName(applicationContext)) killNow()
+        val valid = decryptSig()
+        val s1 = getSignatureV1()
+        val s2 = getSignatureV2()
+        if (s1 == "error" || s2 == "error") killNow()
+        if (s1 != s2) killNow()
+        if (s1 != valid) killNow()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -91,11 +105,8 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 if (call.method == "runSecurityChecks") {
-                    // مكان 6 — MethodChannel runtime
                     result.success(runAllChecks())
-                } else {
-                    result.notImplemented()
-                }
+                } else result.notImplemented()
             }
     }
 
@@ -103,19 +114,12 @@ class MainActivity : FlutterActivity() {
         val helper = SecurityHelper()
         val reasons = mutableListOf<String>()
 
-        val debugCheck = helper.checkDebug()
-        val emuCheck = helper.checkEmulator()
-        val fridaCheck = helper.checkFrida()
-        val rootCheck = helper.checkRoot()
-
-        if (debugCheck != "OK") { killNow(); reasons.add(debugCheck) }
-        if (emuCheck != "OK") reasons.add(emuCheck)
-        if (fridaCheck != "OK") { killNow(); reasons.add(fridaCheck) }
-        if (rootCheck != "OK") reasons.add(rootCheck)
-
-        // مكان 6 — فحص التوقيع مرة تانية في الـ runtime
+        if (helper.checkDebug() != "OK") { killNow(); reasons.add("DEBUG") }
+        if (helper.checkEmulator() != "OK") reasons.add("EMULATOR")
+        if (helper.checkFrida() != "OK") { killNow(); reasons.add("FRIDA") }
+        if (helper.checkRoot() != "OK") reasons.add("ROOT")
+        if (helper.checkXposed() != "OK") { killNow(); reasons.add("XPOSED") }
         checkSignatureOrKill()
-        checkPackageOrKill()
 
         return mapOf("passed" to reasons.isEmpty(), "reason" to reasons.joinToString(", "))
     }

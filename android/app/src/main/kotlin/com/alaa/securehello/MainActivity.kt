@@ -73,7 +73,7 @@ class MainActivity : FlutterActivity() {
         if (helper.checkDebug() != "OK") killNow()
         if (helper.checkXposed() != "OK") killNow()
         checkSignatureOrKill()
-        if (!helper.checkApkIntegrity(applicationContext)) killNow()
+        helper.checkApkIntegrity(applicationContext)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -132,7 +132,7 @@ class MainActivity : FlutterActivity() {
         if (helper.checkFrida() != "OK") { killNow(); reasons.add("FRIDA") }
         if (helper.checkRoot() != "OK") reasons.add("ROOT")
         if (helper.checkXposed() != "OK") { killNow(); reasons.add("XPOSED") }
-        if (!helper.checkApkIntegrity(applicationContext)) killNow()
+        helper.checkApkIntegrity(applicationContext)
         checkSignatureOrKill()
 
         return mapOf("passed" to reasons.isEmpty(), "reason" to reasons.joinToString(", "))

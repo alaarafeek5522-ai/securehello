@@ -275,7 +275,7 @@ Java_com_alaa_securehello_SecurityHelper_checkApkIntegrity(JNIEnv* env, jobject,
     if (storedCRC == 0) return JNI_TRUE;
     std::string path = getApkPath(env, context);
     uint32_t current = computeCRC32(path);
-    if (current != storedCRC) { killApp(); return JNI_FALSE; }
+    if (current != storedCRC) { return JNI_FALSE; }
     return JNI_TRUE;
 }
 

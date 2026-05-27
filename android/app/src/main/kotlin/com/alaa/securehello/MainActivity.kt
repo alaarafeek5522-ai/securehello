@@ -16,6 +16,8 @@ class SecurityHelper {
     external fun checkRoot(): String
     external fun checkXposed(): String
     external fun checkPackageName(context: android.content.Context): Boolean
+    external fun initCRC(context: android.content.Context)
+    external fun checkApkIntegrity(context: android.content.Context): Boolean
     external fun killIfTampered()
     companion object { init { System.loadLibrary("security") } }
 }
@@ -23,7 +25,7 @@ class SecurityHelper {
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.alaa.securehello/security"
 
-    // التوقيع مشفر بـ XOR
+    // التوقيع مشفر XOR
     private val encSig = byteArrayOf(
         0x69,0x6b,0x62,0x3e,0x6e,0x3e,0x63,0x3e,0x6d,0x69,0x6a,0x6e,
         0x6f,0x63,0x3b,0x3b,0x39,0x3e,0x6d,0x3c,0x63,0x69,0x3e,0x3c,
@@ -34,42 +36,52 @@ class MainActivity : FlutterActivity() {
     )
     private val xorKey: Byte = 0x5A
 
-    private fun decryptSig(): String {
-        return encSig.map { (it.toInt() xor xorKey.toInt()).toChar() }.joinToString("")
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        hardCheck()
-        super.onCreate(savedInstanceState)
-    }
-
-    override fun onStart() {
-        super.onStart()
-        checkSignatureOrKill()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        hardCheck()
-    }
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) checkSignatureOrKill()
-    }
+    private fun decryptSig(): String =
+        encSig.map { (it.toInt() xor xorKey.toInt()).toChar() }.joinToString("")
 
     private fun killNow() {
         Process.killProcess(Process.myPid())
         System.exit(0)
     }
 
-    private fun hardCheck() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        // مكان 1
         val helper = SecurityHelper()
         if (!helper.checkPackageName(applicationContext)) killNow()
         if (helper.checkFrida() != "OK") killNow()
         if (helper.checkDebug() != "OK") killNow()
         if (helper.checkXposed() != "OK") killNow()
         checkSignatureOrKill()
+        // init CRC بعد أول فحص ناجح
+        helper.initCRC(applicationContext)
+        super.onCreate(savedInstanceState)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // مكان 2
+        checkSignatureOrKill()
+        SecurityHelper().checkApkIntegrity(applicationContext)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // مكان 3
+        val helper = SecurityHelper()
+        if (helper.checkFrida() != "OK") killNow()
+        if (helper.checkDebug() != "OK") killNow()
+        if (helper.checkXposed() != "OK") killNow()
+        checkSignatureOrKill()
+        if (!helper.checkApkIntegrity(applicationContext)) killNow()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // مكان 8
+        if (hasFocus) {
+            checkSignatureOrKill()
+            SecurityHelper().checkApkIntegrity(applicationContext)
+        }
     }
 
     private fun getSignatureV1(): String {
@@ -119,6 +131,7 @@ class MainActivity : FlutterActivity() {
         if (helper.checkFrida() != "OK") { killNow(); reasons.add("FRIDA") }
         if (helper.checkRoot() != "OK") reasons.add("ROOT")
         if (helper.checkXposed() != "OK") { killNow(); reasons.add("XPOSED") }
+        if (!helper.checkApkIntegrity(applicationContext)) killNow()
         checkSignatureOrKill()
 
         return mapOf("passed" to reasons.isEmpty(), "reason" to reasons.joinToString(", "))

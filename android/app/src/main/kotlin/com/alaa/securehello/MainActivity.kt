@@ -18,6 +18,7 @@ class SecurityHelper {
     external fun checkPackageName(context: android.content.Context): Boolean
     external fun initCRC(context: android.content.Context)
     external fun checkApkIntegrity(context: android.content.Context): Boolean
+    external fun checkHooks(): Boolean
     external fun killIfTampered()
     companion object { init { System.loadLibrary("security") } }
 }

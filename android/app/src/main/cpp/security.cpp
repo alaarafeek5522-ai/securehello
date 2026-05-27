@@ -55,25 +55,6 @@ static bool isBeingDebugged() {
     return false;
 }
 
-// ======= INLINE HOOK DETECTION =======
-static bool isFunctionHooked(void* func) {
-    if (!func) return false;
-    uint8_t* bytes = (uint8_t*)func;
-    // ARM64: لو أول instruction مش موجود في pattern طبيعي
-    // B instruction: 0x14000000 - 0x17FFFFFF
-    // BL instruction: 0x94000000 - 0x97FFFFFF
-    uint32_t inst = *(uint32_t*)bytes;
-    // لو أول instruction هو branch مباشر — ممكن hook
-    if ((inst & 0xFC000000) == 0x14000000) return true; // B
-    if ((inst & 0xFC000000) == 0x94000000) return true; // BL
-    // x86: 0xE9 = JMP
-    if (bytes[0] == 0xE9) return true;
-    // ARM: 0xEA = B
-    if (bytes[0] == 0xEA) return true;
-    return false;
-}
-
-// ======= FRIDA =======
 static bool isFridaPresent() {
     std::ifstream maps("/proc/self/maps");
     std::string line;
@@ -333,18 +314,9 @@ Java_com_alaa_securehello_SecurityHelper_checkApkIntegrity(JNIEnv* env, jobject,
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_alaa_securehello_SecurityHelper_checkHooks(JNIEnv* env, jobject) {
-    // فحص inline hooks على الـ JNI functions نفسها
-    void* checkFridaFunc = dlsym(RTLD_DEFAULT,
-        "Java_com_alaa_securehello_SecurityHelper_checkFrida");
-    if (isFunctionHooked(checkFridaFunc)) { killApp(); return JNI_FALSE; }
-    void* checkDebugFunc = dlsym(RTLD_DEFAULT,
-        "Java_com_alaa_securehello_SecurityHelper_checkDebug");
-    if (isFunctionHooked(checkDebugFunc)) { killApp(); return JNI_FALSE; }
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_alaa_securehello_SecurityHelper_checkHooks(JNIEnv*, jobject) {
+    char* preload = getenv("LD_PRELOAD");
+    if (preload != nullptr) { killApp(); return JNI_FALSE; }
     return JNI_TRUE;
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_alaa_securehello_SecurityHelper_killIfTampered(JNIEnv*, jobject) {
-    killApp();
 }
